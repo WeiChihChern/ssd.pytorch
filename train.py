@@ -15,6 +15,7 @@ import torch.utils.data as data
 import numpy as np
 import argparse
 
+from datetime import datetime
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -51,8 +52,15 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
+parser.add_argument('--optim', default='sgd', choices=['sgd', 'adam'],
+                    help='Choosing optimizer [SGD, Adam]')
+parser.add_argument('--lr_decay', default=0.98,
+                    help='Entering desired learning rate decay rate: new = old * lr_decay')
+parser.add_argument('--snapshot_iter', default=1000, type=int,
+                    help='Snapshot current model with defined iterations')
 args = parser.parse_args()
 
+currentTime = datetime.today().strftime('%Y-%m-%d-%H:%M:%S')
 
 if torch.cuda.is_available():
     if args.cuda:
@@ -84,13 +92,15 @@ def train():
         if args.dataset_root == COCO_ROOT:
             parser.error('Must specify dataset if specifying dataset_root')
         cfg = voc
-        dataset = VOCDetection(root=args.dataset_root,
-                               transform=SSDAugmentation(cfg['min_dim'],
-                                                         MEANS))
+        dataset = VOCDetection(
+            root=args.dataset_root,
+            transform=SSDAugmentation(cfg['min_dim'],MEANS)
+            )
 
     if args.visdom:
         import visdom
         viz = visdom.Visdom()
+
 
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
     net = ssd_net
@@ -104,35 +114,48 @@ def train():
         ssd_net.load_weights(args.resume)
     else:
         vgg_weights = torch.load(args.save_folder + args.basenet)
-        print('Loading base network...')
+        print('\n| Loading base network... |')
         ssd_net.vgg.load_state_dict(vgg_weights)
 
     if args.cuda:
         net = net.cuda()
 
     if not args.resume:
-        print('Initializing weights...')
+        print('| Initializing weights... |')
         # initialize newly added layers' weights with xavier method
         ssd_net.extras.apply(weights_init)
         ssd_net.loc.apply(weights_init)
         ssd_net.conf.apply(weights_init)
 
-    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
+    if args.optim == 'sgd':
+        optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
                           weight_decay=args.weight_decay)
-    criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
-                             False, args.cuda)
+    elif args.optim == 'adam':
+        optimizer = optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+    criterion = MultiBoxLoss(
+            cfg['num_classes'], 
+            0.5,  # overlap_thres
+            True, # prior_for_matching
+            0,    # background_label
+            True, # neg_mining
+            3,    # neg_pos
+            0.5,  # neg_overlap
+            False,# encode_target 
+            args.cuda)
 
     net.train()
     # loss counters
-    loc_loss = 0
+    loc_loss  = 0
     conf_loss = 0
-    epoch = 0
-    print('Loading the dataset...')
+    epoch     = 0
+    print('| Loading the dataset...  |\n')
 
     epoch_size = len(dataset) // args.batch_size
-    print('Training SSD on:', dataset.name)
-    print('Using the specified args:')
+    print('Training Setup:')
+    print('========================================================')
     print(args)
+    print('========================================================')
 
     step_index = 0
 
@@ -153,48 +176,65 @@ def train():
             update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
                             'append', epoch_size)
             # reset epoch loss counters
-            loc_loss = 0
+            loc_loss  = 0
             conf_loss = 0
-            epoch += 1
+            epoch    += 1
 
         if iteration in cfg['lr_steps']:
             step_index += 1
             adjust_learning_rate(optimizer, args.gamma, step_index)
+        # else:
+        #     for param_group in optimizer.param_groups:
+        #         param_group['lr'] *= args.lr_decay
 
         # load train data
-        images, targets = next(batch_iterator)
+        try:
+            images, targets = next(batch_iterator)
+        except StopIteration:
+            batch_iterator=iter(data_loader)
+            images, targets = next(batch_iterator)
 
         if args.cuda:
-            images = Variable(images.cuda())
-            targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
+            images  = Variable(images.cuda())
+            targets = [Variable(ann.cuda()) for ann in targets]
         else:
-            images = Variable(images)
-            targets = [Variable(ann, volatile=True) for ann in targets]
+            images  = Variable(images)
+            targets = [Variable(ann) for ann in targets]
         # forward
         t0 = time.time()
         out = net(images)
         # backprop
         optimizer.zero_grad()
         loss_l, loss_c = criterion(out, targets)
-        loss = loss_l + loss_c
+        loss           = loss_l + loss_c
         loss.backward()
         optimizer.step()
-        t1 = time.time()
-        loc_loss += loss_l.data[0]
-        conf_loss += loss_c.data[0]
+        t1         = time.time()
+        loc_loss  += loss_l.data
+        conf_loss += loss_c.data
 
         if iteration % 10 == 0:
+            for param_group in optimizer.param_groups:
+                cur_lr = param_group['lr']
             print('timer: %.4f sec.' % (t1 - t0))
-            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
+            print('iter ' + repr(iteration) + ' || lr = %.10f' % (cur_lr) ,' || Loss: %.4f ||' % (loss.data), end=' ')
 
         if args.visdom:
-            update_vis_plot(iteration, loss_l.data[0], loss_c.data[0],
+            update_vis_plot(iteration, loss_l.data, loss_c.data,
                             iter_plot, epoch_plot, 'append')
 
-        if iteration != 0 and iteration % 5000 == 0:
+        if iteration != 0 and iteration % args.snapshot_iter == 0:
+            savingName = (currentTime + 
+                    '_lr-'          + str(args.lr)           +
+                    '_weightDecay-' + str(args.weight_decay) +
+                    '_gamma-'       + str(args.gamma)        +
+                    '_optim-'       + str(args.optim)        +
+                    '_momentum-'    + str(args.momentum)     
+            )
             print('Saving state, iter:', iteration)
-            torch.save(ssd_net.state_dict(), 'weights/ssd300_COCO_' +
+            torch.save(ssd_net.state_dict(), 'weights/ssd300-' + savingName +
                        repr(iteration) + '.pth')
+
     torch.save(ssd_net.state_dict(),
                args.save_folder + '' + args.dataset + '.pth')
 
@@ -211,7 +251,7 @@ def adjust_learning_rate(optimizer, gamma, step):
 
 
 def xavier(param):
-    init.xavier_uniform(param)
+    init.xavier_uniform_(param)
 
 
 def weights_init(m):
