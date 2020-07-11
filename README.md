@@ -1,3 +1,6 @@
+### For pytorch 1.6.0 and Cuda 10.1
+Please checkout to branch pytorch-1.6.0-cu101. Verified trainable with ufoym:deepo/latest container.
+
 # SSD: Single Shot MultiBox Object Detector, in PyTorch
 A [PyTorch](http://pytorch.org/) implementation of [Single Shot MultiBox Detector](http://arxiv.org/abs/1512.02325) from the 2016 paper by Wei Liu, Dragomir Anguelov, Dumitru Erhan, Christian Szegedy, Scott Reed, Cheng-Yang, and Alexander C. Berg.  The official and original Caffe code can be found [here](https://github.com/weiliu89/caffe/tree/ssd).
 
