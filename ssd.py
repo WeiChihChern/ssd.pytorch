@@ -147,6 +147,7 @@ def vgg(cfg, i, batch_norm=False):
     conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
     layers += [pool5, conv6,
                nn.ReLU(inplace=True), conv7, nn.ReLU(inplace=True)]
+
     return layers
 
 
@@ -167,20 +168,46 @@ def add_extras(cfg, i, batch_norm=False):
     return layers
 
 
-def multibox(vgg, extra_layers, cfg, num_classes):
-    loc_layers = []
+def multibox(vgg, extra_layers, cfg, num_classes, use_batchNorm=False):
+    """cfg is number of prior boxes' configuration, because output channel depends on this
+        mbox = {
+            '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
+            '512': [],
+        }
+    """
+    # For Debug
+    counter = 0
+    for i in vgg:
+        print(i, 'idx=',counter)
+        counter+=1
+    print('vgg layer size: ', len(vgg))
+    # for i in extra_layers:
+    #     print(i)
+    # print('extra size', len(extra_layers))
+    # input()
+
+    loc_layers  = []
     conf_layers = []
-    vgg_source = [21, -2]
+    if use_batchNorm == False:
+        vgg_source  = [21, -2]
+    else:
+        vgg_source  = [34, -2]
+
     for k, v in enumerate(vgg_source):
+        print('\nk=',k,'v=',v)
+        print(vgg[v])
+        print(cfg[k])
+        input()
         loc_layers += [nn.Conv2d(vgg[v].out_channels,
                                  cfg[k] * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(vgg[v].out_channels,
                         cfg[k] * num_classes, kernel_size=3, padding=1)]
     for k, v in enumerate(extra_layers[1::2], 2):
-        loc_layers += [nn.Conv2d(v.out_channels, cfg[k]
-                                 * 4, kernel_size=3, padding=1)]
-        conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
-                                  * num_classes, kernel_size=3, padding=1)]
+        # print('k=',k,'v=',v,'\n')
+        # print('v.out_channels=', v.out_channels, 'cfg[k]', cfg[k])
+        # input()
+        loc_layers  += [nn.Conv2d(v.out_channels, cfg[k]*4, kernel_size=3, padding=1)]
+        conf_layers += [nn.Conv2d(v.out_channels, cfg[k]*num_classes, kernel_size=3, padding=1)]
     return vgg, extra_layers, (loc_layers, conf_layers)
 
 
@@ -199,7 +226,7 @@ mbox = {
 }
 
 
-def build_ssd(phase, size=300, num_classes=21):
+def build_ssd(phase, size=300, num_classes=21, use_batchNorm=False):
     if phase != "test" and phase != "train":
         print("ERROR: Phase: " + phase + " not recognized")
         return
@@ -207,7 +234,9 @@ def build_ssd(phase, size=300, num_classes=21):
         print("ERROR: You specified size " + repr(size) + ". However, " +
               "currently only SSD300 (size=300) is supported!")
         return
-    base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
-                                     add_extras(extras[str(size)], 1024),
-                                     mbox[str(size)], num_classes)
+    
+    base_, extras_, head_ = multibox(vgg(base[str(size)], 3, use_batchNorm),
+                                     add_extras(extras[str(size)], 1024, use_batchNorm),
+                                     mbox[str(size)], num_classes,
+                                     use_batchNorm)
     return SSD(phase, size, base_, extras_, head_, num_classes)
