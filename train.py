@@ -58,6 +58,8 @@ parser.add_argument('--lr_decay', default=0.98,
                     help='Entering desired learning rate decay rate: new = old * lr_decay')
 parser.add_argument('--snapshot_iter', default=1000, type=int,
                     help='Snapshot current model with defined iterations')
+parser.add_argument('--batchNorm', default=False, type=str2bool,
+                    help='Adding Batch Normalization of not')
 args = parser.parse_args()
 
 currentTime = datetime.today().strftime('%Y-%m-%d-%H:%M:%S')
@@ -102,7 +104,7 @@ def train():
         viz = visdom.Visdom()
 
 
-    ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
+    ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'], args.batchNorm)
     net = ssd_net
 
     if args.cuda:
@@ -112,7 +114,7 @@ def train():
     if args.resume:
         print('Resuming training, loading {}...'.format(args.resume))
         ssd_net.load_weights(args.resume)
-    else:
+    elif args.batchNorm == False:
         vgg_weights = torch.load(args.save_folder + args.basenet)
         print('\n| Loading base network... |')
         ssd_net.vgg.load_state_dict(vgg_weights)
@@ -128,8 +130,7 @@ def train():
         ssd_net.conf.apply(weights_init)
 
     if args.optim == 'sgd':
-        optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
-                          weight_decay=args.weight_decay)
+        optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     elif args.optim == 'adam':
         optimizer = optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
@@ -160,14 +161,15 @@ def train():
     step_index = 0
 
     if args.visdom:
-        vis_title = 'SSD.PyTorch on ' + dataset.name
+        vis_title  = 'SSD.PyTorch on ' + dataset.name
         vis_legend = ['Loc Loss', 'Conf Loss', 'Total Loss']
-        iter_plot = create_vis_plot('Iteration', 'Loss', vis_title, vis_legend)
+        iter_plot  = create_vis_plot('Iteration', 'Loss', vis_title, vis_legend)
         epoch_plot = create_vis_plot('Epoch', 'Loss', vis_title, vis_legend)
 
     data_loader = data.DataLoader(dataset, args.batch_size,
                                   num_workers=args.num_workers,
-                                  shuffle=True, collate_fn=detection_collate,
+                                  shuffle=True, 
+                                  collate_fn=detection_collate,
                                   pin_memory=True)
     # create batch iterator
     batch_iterator = iter(data_loader)
@@ -201,7 +203,7 @@ def train():
             images  = Variable(images)
             targets = [Variable(ann) for ann in targets]
         # forward
-        t0 = time.time()
+        t0  = time.time()
         out = net(images)
         # backprop
         optimizer.zero_grad()
@@ -229,7 +231,8 @@ def train():
                     '_weightDecay-' + str(args.weight_decay) +
                     '_gamma-'       + str(args.gamma)        +
                     '_optim-'       + str(args.optim)        +
-                    '_momentum-'    + str(args.momentum)     
+                    '_momentum-'    + str(args.momentum)     +
+                    '_iter-'
             )
             print('Saving state, iter:', iteration)
             torch.save(ssd_net.state_dict(), 'weights/ssd300-' + savingName +
