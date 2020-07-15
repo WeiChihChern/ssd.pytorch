@@ -203,6 +203,10 @@ def multibox(vgg, extra_layers, cfg, num_classes, use_batchNorm=False):
         vgg_source  = [30, -2]
 
     for k, v in enumerate(vgg_source):
+        print('\nk=',k,'v=',v)
+        print(vgg[v])
+        print(cfg[k])
+        input()
         loc_layers += [nn.Conv2d(vgg[v].out_channels,
                                  cfg[k] * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(vgg[v].out_channels,
