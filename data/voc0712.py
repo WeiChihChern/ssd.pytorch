@@ -18,11 +18,7 @@ else:
     import xml.etree.ElementTree as ET
 
 VOC_CLASSES = (  # always index 0
-    'aeroplane', 'bicycle', 'bird', 'boat',
-    'bottle', 'bus', 'car', 'cat', 'chair',
-    'cow', 'diningtable', 'dog', 'horse',
-    'motorbike', 'person', 'pottedplant',
-    'sheep', 'sofa', 'train', 'tvmonitor')
+    'eye', 'eyeball', 'glass', 'face')
 
 # note: if you used our download scripts, this should be right
 VOC_ROOT = osp.join(HOME, "data/VOCdevkit/")
@@ -95,20 +91,22 @@ class VOCDetection(data.Dataset):
     """
 
     def __init__(self, root,
-                 image_sets=[('2007', 'trainval'), ('2012', 'trainval')],
+                 image_sets=[('trainval')],
                  transform=None, target_transform=VOCAnnotationTransform(),
                  dataset_name='VOC0712'):
-        self.root = root
+        self.root      = root
         self.image_set = image_sets
         self.transform = transform
         self.target_transform = target_transform
-        self.name = dataset_name
+        self.name      = dataset_name
         self._annopath = osp.join('%s', 'Annotations', '%s.xml')
-        self._imgpath = osp.join('%s', 'JPEGImages', '%s.jpg')
-        self.ids = list()
-        for (year, name) in image_sets:
-            rootpath = osp.join(self.root, 'VOC' + year)
-            for line in open(osp.join(rootpath, 'ImageSets', 'Main', name + '.txt')):
+        self._imgpath  = osp.join('%s', 'JPEGImages', '%s.jpg')
+        self.ids       = list()
+        rootpath       = osp.join(self.root)
+        for phase in image_sets:
+            tmp = rootpath +'/ImageSets' + '/Main/' + phase + '.txt'
+            print("\nReading training data from: ", tmp)
+            for line in open(osp.join(tmp)):
                 self.ids.append((rootpath, line.strip()))
 
     def __getitem__(self, index):

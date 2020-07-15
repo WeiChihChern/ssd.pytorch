@@ -1,3 +1,7 @@
+#### python test.py --trained_model=weights/ssd300_COCO_500.pth --voc_root=Eye-DL-IR/  
+#### python train.py --dataset_root=./Eye-DL-IR --batch_size=64 --lr=10e-5 --snapshot_iter=500  
+#### python eval.py --voc_root=./Eye-DL-IR --trained_model=weights/ssd3002020-07-13-08:16:41_lr-0.0001_weightDecay-0.0005_gamma-0.1_optim-sgd_momentum-0.9500.pth  
+
 # SSD: Single Shot MultiBox Object Detector, in PyTorch
 A [PyTorch](http://pytorch.org/) implementation of [Single Shot MultiBox Detector](http://arxiv.org/abs/1512.02325) from the 2016 paper by Wei Liu, Dragomir Anguelov, Dumitru Erhan, Christian Szegedy, Scott Reed, Cheng-Yang, and Alexander C. Berg.  The official and original Caffe code can be found [here](https://github.com/weiliu89/caffe/tree/ssd).
 
