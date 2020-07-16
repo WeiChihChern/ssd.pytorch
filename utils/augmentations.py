@@ -106,7 +106,11 @@ class Resize(object):
         self.size = size
 
     def __call__(self, image, boxes=None, labels=None):
-        image = cv2.resize(image, (self.size,
+        if type(self.size) == tuple:
+            image = cv2.resize(image, (self.size[0],
+                                 self.size[1]))
+        else:
+            image = cv2.resize(image, (self.size,
                                  self.size))
         return image, boxes, labels
 
@@ -400,7 +404,7 @@ class PhotometricDistort(object):
 class SSDAugmentation(object):
     def __init__(self, size=300, mean=(104, 117, 123)):
         self.mean = mean
-        self.size = size
+        self.size = (size,(768,320))[size==320]
         self.augment = Compose([
             ConvertFromInts(),
             ToAbsoluteCoords(),

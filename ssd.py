@@ -34,15 +34,12 @@ class SSD(nn.Module):
         self.priorbox  = PriorBox(self.cfg)
         self.priors    = Variable(self.priorbox.forward(), requires_grad=False)
         self.size      = size
-        self.batchNorm = batchNorm
 
         # SSD network
-        self.vgg = nn.ModuleList(base)
-        # Layer learns to scale the l2 normalized features from conv4_3
-        self.L2Norm = L2Norm(512, 20)
-        self.extras = nn.ModuleList(extras)
-
-        self.loc = nn.ModuleList(head[0])
+        # self.vgg     = nn.ModuleList(base)
+        self.jacinto = nn.ModuleList(base)
+        self.extras  = nn.ModuleList(extras)
+        self.loc  = nn.ModuleList(head[0])
         self.conf = nn.ModuleList(head[1])
 
         if phase == 'test':
@@ -70,36 +67,35 @@ class SSD(nn.Module):
                     2: localization layers, Shape: [batch,num_priors*4]
                     3: priorbox layers, Shape: [2,num_priors*4]
         """
+
+        # jacinto -> extra (1x1 conv) -> (loc, conf) 1x1 conv 
         sources = list()
+        extra   = list()
         loc     = list()
         conf    = list()
 
-        if self.batchNorm == False: 
-            tmp_i = 23
-        else:
-            tmp_i = 31
-
-        for k in range(tmp_i):
-            x = self.vgg[k](x)
-        
-        s = self.L2Norm(x)
-        sources.append(s)
-
-        for k in range(tmp_i, len(self.vgg)):
-            # print(k, end=' | ')
-            # print(self.vgg[k])
-            x = self.vgg[k](x)
+        ### Base network
+        for k in range(19):
+            x = self.jacinto[k](x)
         sources.append(x)
         
-        # apply extra layers and cache source layer outputs
-        # print(self.extras)
-        for k, v in enumerate(self.extras):
-            x = F.relu(v(x), inplace=True)
-            if k % 2 == 1:
+        for k in range(19, 33):
+            x = self.jacinto[k](x)
+        sources.append(x) 
+        
+        for k in range(33, 38): 
+            x = self.jacinto[k](x)
+            if k != 33:
                 sources.append(x)
 
-        # apply multibox head to source layers
-        for (x, l, c) in zip(sources, self.loc, self.conf):
+        ### Feeding 6 of basenet's output to extra layers (1x1 conv layers)
+        for k in range(len(self.extras)):
+            x = F.relu(self.extras[k](sources[k]))
+            extra.append(x)
+
+        ### Apply multibox head to source layers
+        counter = 0
+        for (x, l, c) in zip(extra, self.loc, self.conf):
             loc.append(l(x).permute(0, 2, 3, 1).contiguous())
             conf.append(c(x).permute(0, 2, 3, 1).contiguous())
 
@@ -132,6 +128,76 @@ class SSD(nn.Module):
             print('Sorry only .pth and .pkl files supported.')
 
 
+
+def jacintoNet(printmodel=False):
+    layers = []
+    layers.append(nn.Conv2d(3, 32, kernel_size=5, padding=2, groups=1, stride=2))
+    layers.append(nn.BatchNorm2d(32))
+    layers.append(nn.ReLU(inplace=True))
+    layers.append(nn.Conv2d(32, 32, kernel_size=3, padding=1, groups=4, stride=1))
+    layers.append(nn.BatchNorm2d(32))
+    layers.append(nn.ReLU(inplace=True))
+    layers.append(nn.MaxPool2d(kernel_size=2, stride=2)) #6
+
+    layers.append(nn.Conv2d(32, 64, kernel_size=3, padding=1, groups=1, stride=1))
+    layers.append(nn.BatchNorm2d(64))
+    layers.append(nn.ReLU(inplace=True))
+    layers.append(nn.Conv2d(64, 64, kernel_size=3, padding=1, groups=4, stride=1))
+    layers.append(nn.BatchNorm2d(64))
+    layers.append(nn.ReLU(inplace=True))
+    layers.append(nn.MaxPool2d(kernel_size=2, stride=2)) #13
+    
+    layers.append(nn.Conv2d(64,  128, kernel_size=3, padding=1, groups=1, stride=1))
+    layers.append(nn.BatchNorm2d(128))
+    layers.append(nn.ReLU(inplace=True))
+    layers.append(nn.Conv2d(128, 128, kernel_size=3, padding=1, groups=4, stride=1)) 
+    layers.append(nn.BatchNorm2d(128))                                                 # feed to ctx_output1
+    layers.append(nn.ReLU(inplace=True))
+    layers.append(nn.MaxPool2d(kernel_size=2, stride=2)) #20
+ 
+    layers.append(nn.Conv2d(128,  256, kernel_size=3, padding=1, groups=1, stride=1))
+    layers.append(nn.BatchNorm2d(256))
+    layers.append(nn.ReLU(inplace=True))
+    layers.append(nn.Conv2d(256,  256, kernel_size=3, padding=1, groups=4, stride=1)) 
+    layers.append(nn.BatchNorm2d(256))
+    layers.append(nn.ReLU(inplace=True))
+    layers.append(nn.MaxPool2d(kernel_size=2, stride=2)) #27
+
+    layers.append(nn.Conv2d(256,  512, kernel_size=3, padding=1, groups=1, stride=1))
+    layers.append(nn.BatchNorm2d(512))
+    layers.append(nn.ReLU(inplace=True)) #30
+    layers.append(nn.Conv2d(512,  512, kernel_size=3, padding=1, groups=4, stride=1)) 
+    layers.append(nn.BatchNorm2d(512))   #32                                          # feed to ctx_output2
+    layers.append(nn.ReLU(inplace=True))
+    layers.append(nn.MaxPool2d(kernel_size=2, stride=2))   # 34                       # feed to ctx_output3
+    layers.append(nn.MaxPool2d(kernel_size=2, stride=2))                              # feed to ctx_output4
+    layers.append(nn.MaxPool2d(kernel_size=2, stride=2))                              # feed to ctx_output5
+    layers.append(nn.MaxPool2d(kernel_size=(1,3), stride=2))                          # feed to ctx_output6
+    
+    if printmodel == True:
+        counter = 0
+        for i in layers:
+            print(counter, " | ", end="")
+            print(i)
+            counter += 1
+
+    return layers
+
+
+def jacinto_extras():
+    layers = []
+    out_channel = 256
+    # 1x1 conv layers
+    layers.append(nn.Conv2d(128, out_channel, kernel_size=1, stride=1, padding=0))
+    layers.append(nn.Conv2d(512, out_channel, kernel_size=1, stride=1, padding=0))
+    layers.append(nn.Conv2d(512, out_channel, kernel_size=1, stride=1, padding=0))
+    layers.append(nn.Conv2d(512, out_channel, kernel_size=1, stride=1, padding=0))
+    layers.append(nn.Conv2d(512, out_channel, kernel_size=1, stride=1, padding=0))
+    layers.append(nn.Conv2d(512, out_channel, kernel_size=1, stride=1, padding=0))
+    return layers
+
+
+
 # This function is derived from torchvision VGG make_layers()
 # https://github.com/pytorch/vision/blob/master/torchvision/models/vgg.py
 def vgg(cfg, i, batch_norm=False):
@@ -154,9 +220,7 @@ def vgg(cfg, i, batch_norm=False):
     conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
     layers += [pool5, conv6,
                nn.ReLU(inplace=True), conv7, nn.ReLU(inplace=True)]
-
     return layers
-
 
 def add_extras(cfg, i, batch_norm=False):
     # Extra layers added to VGG for feature scaling
@@ -175,49 +239,42 @@ def add_extras(cfg, i, batch_norm=False):
     return layers
 
 
-def multibox(vgg, extra_layers, cfg, num_classes, use_batchNorm=False):
+
+
+
+def multibox(jacinto, extra_layers, cfg, num_classes, use_batchNorm=False):
     """cfg is number of prior boxes' configuration, because output channel depends on this
         mbox = {
             '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
             '512': [],
         }
     """
-    # # For Debug
-    print("Base network: ")
-    counter = 0
-    for i in vgg:
-        print('('+str(counter)+')', end=' | ')
-        print(i)
-        counter+=1
-    print("Extra layers: ")
-    for i in extra_layers:
-        print('('+str(counter)+')', end=' | ')
-        print(i)
-        counter+=1
+    # # # For Debug
+    # print("Base network: ")
+    # counter = 0
+    # for i in vgg:
+    #     print('('+str(counter)+')', end=' | ')
+    #     print(i)
+    #     counter+=1
+    # counter = 0
+    # print("Extra layers: ")
+    # for i in extra_layers:
+    #     print('('+str(counter)+')', end=' | ')
+    #     print(i)
+    #     counter+=1
 
     loc_layers  = []
     conf_layers = []
-    if use_batchNorm == False:
-        vgg_source  = [21, -2] 
-    else:
-        vgg_source  = [30, -2]
-
-    for k, v in enumerate(vgg_source):
-        print('\nk=',k,'v=',v)
-        print(vgg[v])
-        print(cfg[k])
-        input()
-        loc_layers += [nn.Conv2d(vgg[v].out_channels,
-                                 cfg[k] * 4, kernel_size=3, padding=1)]
-        conf_layers += [nn.Conv2d(vgg[v].out_channels,
-                        cfg[k] * num_classes, kernel_size=3, padding=1)]
-
-    for k, v in enumerate(extra_layers[1::2], 2):
-        loc_layers  += [nn.Conv2d(v.out_channels, cfg[k]*4, kernel_size=3, padding=1)]
-        conf_layers += [nn.Conv2d(v.out_channels, cfg[k]*num_classes, kernel_size=3, padding=1)]
     
+    
+    #loc layers
+    for i in range(6):
+        loc_layers += [nn.Conv2d(256, cfg[i] * 4, kernel_size=3, padding=1)]
+    #conf layers
+    for i in range(6):
+        conf_layers+= [nn.Conv2d(256, cfg[i] * num_classes, kernel_size=3, padding=1)]
 
-    return vgg, extra_layers, (loc_layers, conf_layers)
+    return jacinto, extra_layers, (loc_layers, conf_layers)
 
 
 base = {
@@ -230,8 +287,9 @@ extras = {
     '512': [],
 }
 mbox = {
-    '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
-    '512': [],
+    '300' : [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
+    '512' : [],
+    '320' : [4, 6, 6, 6, 4, 4],  # 768x320
 }
 
 
@@ -239,13 +297,21 @@ def build_ssd(phase, size=300, num_classes=21, use_batchNorm=False):
     if phase != "test" and phase != "train":
         print("ERROR: Phase: " + phase + " not recognized")
         return
-    if size != 300:
-        print("ERROR: You specified size " + repr(size) + ". However, " +
-              "currently only SSD300 (size=300) is supported!")
-        return
+    # if size != 300:
+    #     print("ERROR: You specified size " + repr(size) + ". However, " +
+    #           "currently only SSD300 (size=300) is supported!")
+    #     return
     
-    base_, extras_, head_ = multibox(vgg(base[str(size)], 3, use_batchNorm),
-                                     add_extras(extras[str(size)], 1024, use_batchNorm),
+    ## VGG
+    # base_, extras_, head_ = multibox(vgg(base[str(size)], 3, use_batchNorm),
+    #                                  add_extras(extras[str(size)], 1024, use_batchNorm),
+    #                                  mbox[str(size)], num_classes,
+    #                                  use_batchNorm)
+
+    ## Jacinto
+    base_, extras_, head_ = multibox(jacintoNet(),
+                                     jacinto_extras(),
                                      mbox[str(size)], num_classes,
-                                     use_batchNorm)
+                                     use_batchNorm)       
+
     return SSD(phase, size, base_, extras_, head_, num_classes, use_batchNorm)

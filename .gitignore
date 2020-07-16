@@ -1,6 +1,7 @@
 Eye-DL-IR/
 Eye-DL-IRVOC2007/
-
+Test/
+TestVOC2007/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

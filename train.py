@@ -114,10 +114,7 @@ def train():
     if args.resume:
         print('Resuming training, loading {}...'.format(args.resume))
         ssd_net.load_weights(args.resume)
-    elif args.batchNorm == False:
-        vgg_weights = torch.load(args.save_folder + args.basenet)
-        print('\n| Loading base network... |')
-        ssd_net.vgg.load_state_dict(vgg_weights)
+    
 
     if args.cuda:
         net = net.cuda()
