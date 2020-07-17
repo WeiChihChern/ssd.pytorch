@@ -28,7 +28,10 @@ def detection_collate(batch):
 
 
 def base_transform(image, size, mean):
-    x = cv2.resize(image, (size, size)).astype(np.float32)
+    if type(size) == int:
+        x = cv2.resize(image, (size, size)).astype(np.float32)
+    elif type(size) == tuple:
+        x = cv2.resize(image, (size[0], size[1])).astype(np.float32)
     x -= mean
     x = x.astype(np.float32)
     return x

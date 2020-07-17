@@ -1,6 +1,19 @@
-#### python test.py --trained_model=weights/ssd300_COCO_500.pth --voc_root=Eye-DL-IR/  
-#### python train.py --dataset_root=./Eye-DL-IR --batch_size=64 --lr=10e-5 --snapshot_iter=500  
-#### python eval.py --voc_root=./Eye-DL-IR --trained_model=weights/ssd3002020-07-13-08:16:41_lr-0.0001_weightDecay-0.0005_gamma-0.1_optim-sgd_momentum-0.9500.pth  
+## How to:
+
+  - Within folder, 'git clone'/download your testing and training data to: 
+    > /pytorch-ssd/myData/Train
+    > /pytorch-ssd/myData/Test 
+
+    Each /Train & /Test should follow VOC's format which containing two subfolders /Annotations & / JPEGImages respectively
+    
+  - When Training you can use following command as an example:
+    >  python train.py --dataset_root=./myData/Train --batch_size=64 --lr=10e-4 --snapshot_iter=500 
+
+  - When Testing you can use following command as an example:
+    >  python test.py --trained_model=weights/your-trained-model.pth --voc_root=./myData/Test
+
+  - When Evaluatign you can use following command as an example:
+    >  python eval.py --voc_root=./myData/Test --trained_model=weights/your-trained-model.pth 
 
 # SSD: Single Shot MultiBox Object Detector, in PyTorch
 A [PyTorch](http://pytorch.org/) implementation of [Single Shot MultiBox Detector](http://arxiv.org/abs/1512.02325) from the 2016 paper by Wei Liu, Dragomir Anguelov, Dumitru Erhan, Christian Szegedy, Scott Reed, Cheng-Yang, and Alexander C. Berg.  The official and original Caffe code can be found [here](https://github.com/weiliu89/caffe/tree/ssd).

@@ -79,7 +79,7 @@ def test_net(save_folder, net, cuda, testset, transform, thresh):
 def test_voc():
     # load net
     num_classes = len(VOC_CLASSES) + 1 # +1 background
-    net = build_ssd('test', 300, num_classes) # initialize SSD
+    net = build_ssd('test', 320, 5) # initialize SSD
     net.load_state_dict(torch.load(args.trained_model))
     net.eval()
     print('Finished loading model!')
@@ -89,8 +89,10 @@ def test_voc():
         net = net.cuda()
         cudnn.benchmark = True
     # evaluation
+    
+
     test_net(args.save_folder, net, args.cuda, testset,
-             BaseTransform(net.size, (104, 117, 123)),
+             BaseTransform((300, (768,320))[net.size==320], (104, 117, 123)),
              thresh=args.visual_threshold)
 
 if __name__ == '__main__':

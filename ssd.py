@@ -78,23 +78,24 @@ class SSD(nn.Module):
         for k in range(19):
             x = self.jacinto[k](x)
         sources.append(x)
-        
+
         for k in range(19, 33):
             x = self.jacinto[k](x)
-        sources.append(x) 
-        
-        for k in range(33, 38): 
+        sources.append(x)
+
+        x = self.jacinto[33](x)
+
+        for k in range(34, 38): 
             x = self.jacinto[k](x)
-            if k != 33:
-                sources.append(x)
+            sources.append(x)
 
         ### Feeding 6 of basenet's output to extra layers (1x1 conv layers)
         for k in range(len(self.extras)):
             x = F.relu(self.extras[k](sources[k]))
             extra.append(x)
 
+
         ### Apply multibox head to source layers
-        counter = 0
         for (x, l, c) in zip(extra, self.loc, self.conf):
             loc.append(l(x).permute(0, 2, 3, 1).contiguous())
             conf.append(c(x).permute(0, 2, 3, 1).contiguous())
